@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo, useTransition } from 'react';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { Animal, OrgProfile, AnimalCategory, HazardRating, SignContent } from '@/src/types';
 import { X, Download, Info, Loader2, Globe, Edit2, Save, RefreshCw, Calendar, LayoutTemplate, Sun, Moon, Sparkles, Droplets } from 'lucide-react';
 import { generateSignageContent, generateExoticSummary } from '@/src/services/geminiService';

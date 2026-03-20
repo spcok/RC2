@@ -5,21 +5,19 @@ export const UpdateBanner: React.FC = () => {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem('koa_just_updated') === 'true') {
-      return; // Safety lock
-    }
-
-    // Catch updates that arrived while the auth layer was loading
-    // @ts-expect-error - custom property
-    if (window.pwaUpdateReady) {
-      console.log('🛠️ [PWA] Caught stashed update flag on mount.');
-      setTimeout(() => setShow(true), 0);
-    }
-
     const handleUpdate = () => {
       console.log('🛠️ [PWA] Update banner triggered by event.');
       setShow(true);
     };
+
+    // Check for waiting SW on mount
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg && reg.waiting) {
+          setShow(true);
+        }
+      });
+    }
 
     window.addEventListener('pwa-update-available', handleUpdate);
     return () => window.removeEventListener('pwa-update-available', handleUpdate);
@@ -27,14 +25,11 @@ export const UpdateBanner: React.FC = () => {
 
   const handleUpdateNow = async () => {
     if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      for (const registration of registrations) {
-        if (registration.waiting) {
-          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-        }
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration && registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
       }
     }
-    sessionStorage.setItem('koa_just_updated', 'true');
     // Small delay to allow SW to skip waiting before reload
     setTimeout(() => {
       window.location.reload();

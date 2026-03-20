@@ -11,7 +11,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../lib/db';
 import Cropper from 'react-easy-crop';
 import { getCroppedImg } from '../../utils/cropImage';
-import { uploadFile } from '../../lib/storageEngine';
+import { queueFileUpload } from '../../lib/storageEngine';
 import { useAuthStore } from '../../store/authStore';
 
 interface AnimalFormModalProps {
@@ -39,6 +39,7 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
   const [isCropping, setIsCropping] = useState(false);
   const [isUploadingCrop, setIsUploadingCrop] = useState(false);
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
 
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -56,15 +57,18 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
     try {
       setIsUploadingCrop(true);
       const croppedBlob = await getCroppedImg(imageToCrop, croppedAreaPixels);
-      const croppedFile = new File([croppedBlob], `cropped-${Date.now()}.jpg`, { type: 'image/jpeg' });
-
-      const url = await uploadFile(croppedFile, 'animals');
-      setValue('image_url', url, { shouldValidate: true, shouldDirty: true });
+      
+      // Store the blob for upload during form submission
+      setPhotoBlob(croppedBlob);
+      
+      // Create a local URL for preview in the UI
+      const previewUrl = URL.createObjectURL(croppedBlob);
+      setValue('image_url', previewUrl, { shouldValidate: true, shouldDirty: true });
 
       setIsCropping(false);
       setImageToCrop(null);
     } catch (error) {
-      console.error('Crop/Upload failed:', error);
+      console.error('Crop failed:', error);
       alert('Failed to process image. Please try again.');
     } finally {
       setIsUploadingCrop(false);
@@ -104,8 +108,22 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
       dam_id: data.dam_id === "" ? null : data.dam_id,
     };
 
+    const finalId = initialData?.id || uuidv4();
+    let finalImageUrl = data.image_url;
+
+    if (photoBlob) {
+      try {
+        const photoFile = new File([photoBlob], `profile-${finalId}.jpg`, { type: 'image/jpeg' });
+        const uploadResult = await queueFileUpload(photoFile, 'animals', finalId, 'animals', 'image_url');
+        finalImageUrl = uploadResult.attachment_url;
+      } catch (error) {
+        console.error('Failed to upload profile image to bucket:', error);
+      }
+    }
+
     const payload = {
       ...sanitizedData,
+      image_url: finalImageUrl,
       critical_husbandry_notes: sanitizedData.critical_husbandry_notes
         ? sanitizedData.critical_husbandry_notes.split('\n').map(n => n.trim()).filter(n => n.length > 0)
         : [],
@@ -118,7 +136,6 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
       winter_weight_g: winterGrams > 0 ? winterGrams : null,
       weight_unit: weightUnit === 'lb' ? 'lbs_oz' : weightUnit
     };
-    
     try {
       if (initialData) {
         if (initialData.location !== payload.location && initialData.location !== 'Main Aviary') {
@@ -136,12 +153,10 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
           await mutateOnlineFirst('internal_movements', internalMovement, 'upsert');
         }
       } else {
-        const newAnimalId = uuidv4();
-        payload.id = newAnimalId;
         if (['BORN', 'TRANSFERRED_IN', 'RESCUE'].includes(payload.acquisition_type)) {
           const externalTransfer: ExternalTransfer = {
             id: crypto.randomUUID(),
-            animal_id: newAnimalId,
+            animal_id: finalId,
             animal_name: payload.name,
             transfer_type: TransferType.ARRIVAL,
             date: payload.acquisition_date || new Date().toISOString().split('T')[0],
@@ -162,7 +177,7 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
       const animalData: Animal = {
         ...initialData,
         ...payload,
-        id: initialData?.id || payload.id || uuidv4(),
+        id: finalId,
       } as Animal;
 
       await mutateOnlineFirst('animals', animalData, 'upsert');

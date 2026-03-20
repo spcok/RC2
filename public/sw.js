@@ -16,6 +16,7 @@ const broadcast = new BroadcastChannel('koa-pwa-messages');
 
 // Install Event
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(APP_SHELL);
@@ -38,10 +39,11 @@ self.addEventListener('activate', (event) => {
         );
       }),
       // 2. Prune 14-day compliance data
-      pruneComplianceCaches()
+      pruneComplianceCaches(),
+      // 3. Claim clients
+      self.clients.claim()
     ])
   );
-  self.clients.claim();
 });
 
 // Background Sync
