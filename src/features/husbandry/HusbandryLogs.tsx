@@ -88,7 +88,7 @@ export const HusbandryLogs: React.FC<Props> = ({ animalId, animal }) => {
           table_name: 'daily_logs',
           record_id: entry.id,
           operation: 'upsert',
-          payload: entry as LogEntry,
+          payload: entry as unknown as Record<string, unknown>,
           status: 'pending',
           priority: 1,
           retry_count: 0,

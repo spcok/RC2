@@ -167,6 +167,7 @@ const MedicalRecords: React.FC<MedicalRecordsProps> = ({ animalId, variant = 'fu
         onSave={editingNote && !isCorrection ? updateClinicalNote : addClinicalNote} 
         animals={animals}
         initialData={editingNote}
+        preselectedAnimalId={selectedPatient !== 'All' ? selectedPatient : undefined}
       />
       
       <AddMarChartModal 

@@ -94,7 +94,7 @@ const AddEntryModal: React.FC<AddEntryModalProps> = ({
   });
 
   const targetUnit = animal?.weight_unit === 'lbs_oz' ? 'lb' : (animal?.weight_unit === 'oz' ? 'oz' : 'g');
-  const [weightValues, setWeightValues] = useState(() => {
+  const [weightValues, setWeightValues] = useState<{ g: number; lb: number; oz: number; eighths: number }>(() => {
     if (existingLog?.weight_grams) {
       return convertFromGrams(existingLog.weight_grams, targetUnit as 'g' | 'oz' | 'lb');
     }

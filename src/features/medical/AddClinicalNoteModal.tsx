@@ -29,9 +29,10 @@ interface Props {
   onSave: (note: Partial<ClinicalNote>) => Promise<void>;
   animals: Animal[];
   initialData?: ClinicalNote | null;
+  preselectedAnimalId?: string;
 }
 
-export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave, animals, initialData }) => {
+export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave, animals, initialData, preselectedAnimalId }) => {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [signatureData, setSignatureData] = useState<string | undefined>();
@@ -43,6 +44,7 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
   const { register, handleSubmit, control, formState: { errors, isSubmitting }, reset, setValue } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
+      animal_id: preselectedAnimalId || '',
       date: new Date().toISOString().split('T')[0],
       note_type: 'Routine',
     }
@@ -84,6 +86,7 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
       }
     } else if (isOpen && !initialData) {
       reset({
+        animal_id: preselectedAnimalId || '',
         date: new Date().toISOString().split('T')[0],
         note_type: 'Routine',
       });
@@ -92,7 +95,7 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
       setWeightValues({ g: 0, lb: 0, oz: 0, eighths: 0 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, initialData, setValue, reset]); // Exclude targetUnit to prevent overwriting user input on unit change
+  }, [isOpen, initialData, setValue, reset, preselectedAnimalId]); // Exclude targetUnit to prevent overwriting user input on unit change
 
   if (!isOpen) return null;
 
@@ -151,8 +154,9 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 space-y-4 my-8">
+    <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto p-4">
+      <div className="flex min-h-full items-center justify-center">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 space-y-4">
         <div className="flex justify-between items-center border-b border-slate-100 pb-2">
           <h2 className="text-lg font-bold text-slate-900">{initialData ? 'Edit Clinical Note' : 'Add Clinical Note'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
@@ -326,6 +330,7 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
             {isSubmitting || uploading ? <><Loader2 className="animate-spin" size={16} /> Saving...</> : 'Save Note'}
           </button>
         </form>
+        </div>
       </div>
     </div>
   );

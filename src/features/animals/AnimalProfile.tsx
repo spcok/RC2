@@ -183,6 +183,21 @@ export default function AnimalProfile({ animalId, onBack }: Props) {
         {activeTab === 'profile' && (
           <div className="max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              {/* Critical Husbandry Notes */}
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 lg:col-span-1 xl:col-span-2">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="text-red-500" size={20} />
+                  <h3 className="font-semibold text-red-900">Critical Husbandry Notes</h3>
+                </div>
+                {animal.critical_husbandry_notes && animal.critical_husbandry_notes.length > 0 ? (
+                  <ul className="list-disc list-outside ml-8 text-sm text-red-800 space-y-1">
+                    {animal.critical_husbandry_notes.map((note, idx) => <li key={idx}>{note}</li>)}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-red-700">No critical notes.</p>
+                )}
+              </div>
+
               {/* Lineage & Genetics */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -226,24 +241,10 @@ export default function AnimalProfile({ animalId, onBack }: Props) {
                   <h3 className="font-semibold text-slate-900">Environmental Targets</h3>
                 </div>
                 <div className="space-y-2 text-sm">
-                  <p><span className="text-slate-500">Temp Target:</span> {animal.temp_target_c ?? 'N/A'}°C</p>
-                  <p><span className="text-slate-500">Humidity Target:</span> {animal.humidity_target_percent ?? 'N/A'}%</p>
+                  <p><span className="text-slate-500">Day Temp Target:</span> {animal.target_day_temp_c ?? 'N/A'}°C</p>
+                  <p><span className="text-slate-500">Night Temp Target:</span> {animal.target_night_temp_c ?? 'N/A'}°C</p>
+                  <p><span className="text-slate-500">Humidity Target:</span> {animal.target_humidity_min_percent ?? 'N/A'}% - {animal.target_humidity_max_percent ?? 'N/A'}%</p>
                 </div>
-              </div>
-
-              {/* Critical Husbandry Notes */}
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 lg:col-span-1 xl:col-span-2">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertTriangle className="text-red-500" size={20} />
-                  <h3 className="font-semibold text-red-900">Critical Husbandry Notes</h3>
-                </div>
-                {animal.critical_husbandry_notes && animal.critical_husbandry_notes.length > 0 ? (
-                  <ul className="list-disc list-outside ml-8 text-sm text-red-800 space-y-1">
-                    {animal.critical_husbandry_notes.map((note, idx) => <li key={idx}>{note}</li>)}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-red-700">No critical notes.</p>
-                )}
               </div>
             </div>
           </div>

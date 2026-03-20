@@ -31,22 +31,24 @@ export const convertToGrams = (unit: 'g' | 'oz' | 'lb', values: { g?: number; lb
   return 0;
 };
 
-export const convertFromGrams = (grams: number, unit: 'g' | 'oz' | 'lb'): { g?: number; lb?: number; oz?: number } => {
-  if (unit === 'g') return { g: Math.round(grams) };
-  
+export const convertFromGrams = (grams: number, unit: 'g' | 'oz' | 'lb'): { g: number; lb: number; oz: number; eighths: number } => {
   const totalOz = grams / 28.3495;
+  const eighths = Math.round((totalOz % 1) * 8);
+
+  if (unit === 'g') return { g: Math.round(grams), lb: 0, oz: 0, eighths: 0 };
   
   if (unit === 'oz') {
-    return { oz: Math.round(totalOz * 10) / 10 };
+    const oz = Math.floor(totalOz);
+    return { g: 0, lb: 0, oz, eighths };
   }
   
   if (unit === 'lb') {
-    const lbs = Math.floor(totalOz / 16);
-    const oz = Math.round((totalOz % 16) * 10) / 10;
-    return { lb: lbs, oz };
+    const lb = Math.floor(totalOz / 16);
+    const oz = Math.floor(totalOz % 16);
+    return { g: 0, lb, oz, eighths };
   }
   
-  return {};
+  return { g: 0, lb: 0, oz: 0, eighths: 0 };
 };
 
 export const parseLegacyWeightToGrams = (raw: string | undefined | null): number | null => {
