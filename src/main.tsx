@@ -62,7 +62,7 @@ if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then((readyRegistration) => {
         if ('sync' in readyRegistration) {
           // @ts-expect-error - sync is not in standard types yet
-          readyRegistration.sync.register('koa-sync').catch((err) => {
+          readyRegistration.sync.register('koa-data-sync').catch((err) => {
             console.warn('🛠️ [PWA] Background Sync registration failed:', err);
           });
         }

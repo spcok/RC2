@@ -143,7 +143,7 @@ export async function processSyncQueue() {
     // WARP SPEED: Increased Queue Velocity to 150 records per bite
     const queue = await db.sync_queue
       .where('status')
-      .notEqual('quarantined')
+      .equals('pending')
       .limit(150)
       .toArray();
     

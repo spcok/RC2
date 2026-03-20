@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,14 +8,13 @@ import { queueFileUpload } from '../../lib/storageEngine';
 import { SignatureCapture } from '../../components/ui/SignatureCapture';
 import { convertToGrams, convertFromGrams } from '../../services/weightUtils';
 
+// 1. ZOD SCHEMA AMPUTATION: weight and weight_unit are strictly removed.
 const schema = z.object({
   animal_id: z.string().min(1, 'Animal is required'),
   date: z.string().min(1, 'Date is required'),
   note_type: z.enum(['Illness', 'Checkup', 'Injury', 'Routine']),
   diagnosis: z.string().optional(),
   bcs: z.number().min(1).max(5).optional(),
-  weight: z.number().positive().optional(),
-  weight_unit: z.enum(['g', 'kg', 'oz', 'lbs', 'lbs_oz']).optional(),
   note_text: z.string().min(5, 'Note must be at least 5 characters'),
   treatment_plan: z.string().optional(),
   recheck_date: z.string().optional(),
@@ -40,7 +39,8 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
   const [isCapturingSignature, setIsCapturingSignature] = useState(false);
   const recordId = initialData?.id || crypto.randomUUID();
 
-  const { register, handleSubmit, control, formState: { errors, isSubmitting }, reset } = useForm<FormData>({
+  // 2. FORM INITIALIZATION
+  const { register, handleSubmit, control, formState: { errors, isSubmitting }, reset, setValue } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       date: new Date().toISOString().split('T')[0],
@@ -48,34 +48,39 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
     }
   });
 
+  // 3. THE OBSERVER PATTERN: Watch the selected animal and derive the unit
   const selectedAnimalId = useWatch({ control, name: 'animal_id' });
   const selectedAnimal = animals?.find(a => a.id === selectedAnimalId);
   const targetUnit = selectedAnimal?.weight_unit === 'lbs_oz' ? 'lb' : (selectedAnimal?.weight_unit === 'oz' ? 'oz' : 'g');
+  
+  // 4. ABSOLUTE STATE ISOLATION: Manual weight tracking independent of RHF
   const [weightValues, setWeightValues] = useState({ g: 0, lb: 0, oz: 0, eighths: 0 });
 
   const handleWeightChange = (field: string, val: string) => {
-    const num = parseInt(val) || 0;
+    const num = val === '' ? 0 : parseInt(val, 10);
     setWeightValues(prev => ({ ...prev, [field]: num }));
   };
 
+  // 5. HYDRATION: Load existing data into the form and manual state
   useEffect(() => {
     if (isOpen && initialData) {
-      reset({
-        animal_id: initialData.animal_id,
-        date: initialData.date,
-        note_type: initialData.note_type as 'Illness' | 'Checkup' | 'Injury' | 'Routine',
-        diagnosis: initialData.diagnosis || '',
-        bcs: initialData.bcs,
-        note_text: initialData.note_text,
-        treatment_plan: initialData.treatment_plan || '',
-        recheck_date: initialData.recheck_date || '',
-        staff_initials: initialData.staff_initials,
-      });
+      setValue('animal_id', initialData.animal_id);
+      setValue('date', initialData.date);
+      setValue('note_type', initialData.note_type as 'Illness' | 'Checkup' | 'Injury' | 'Routine');
+      setValue('diagnosis', initialData.diagnosis || '');
+      setValue('bcs', initialData.bcs);
+      setValue('note_text', initialData.note_text);
+      setValue('treatment_plan', initialData.treatment_plan || '');
+      setValue('recheck_date', initialData.recheck_date || '');
+      setValue('staff_initials', initialData.staff_initials);
       setSignatureData(undefined);
       setIntegritySeal(initialData.integrity_seal);
+
+      // Hydrate custom weight state
       if (initialData.weight_grams) {
-        const converted = convertFromGrams(initialData.weight_grams, targetUnit as 'g' | 'oz' | 'lb');
-        setWeightValues({ g: converted.g || 0, lb: converted.lb || 0, oz: converted.oz || 0, eighths: converted.eighths || 0 });
+        setWeightValues(convertFromGrams(initialData.weight_grams, targetUnit as 'g' | 'oz' | 'lb'));
+      } else {
+        setWeightValues({ g: 0, lb: 0, oz: 0, eighths: 0 });
       }
     } else if (isOpen && !initialData) {
       reset({
@@ -86,19 +91,17 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
       setIntegritySeal(undefined);
       setWeightValues({ g: 0, lb: 0, oz: 0, eighths: 0 });
     }
-  }, [isOpen, initialData, reset]);
-
-  // Reset weight values when animal changes
-  useEffect(() => {
-    setWeightValues({ g: 0, lb: 0, oz: 0, eighths: 0 });
-  }, [selectedAnimalId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialData, setValue, reset]); // Exclude targetUnit to prevent overwriting user input on unit change
 
   if (!isOpen) return null;
 
+  // 6. THE SUBMISSION INTERCEPTOR
   const onSubmit = async (data: FormData) => {
     setUploading(true);
     let attachment_url: string | undefined = initialData?.attachment_url;
     let thumbnail_url: string | undefined = initialData?.thumbnail_url;
+    
     try {
       if (file) {
         try {
@@ -107,14 +110,17 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
           thumbnail_url = uploadResult.thumbnail_url;
         } catch (err) {
           console.error('🛠️ [Medical QA] File processing error:', err);
-          alert(err instanceof Error ? err.message : 'Image too large for offline storage or processing failed.');
+          alert(err instanceof Error ? err.message : 'Image too large for offline processing.');
           setFile(null);
           setUploading(false);
           return;
         }
       }
       
+      // Calculate final grams securely from isolated state
       const totalGrams = convertToGrams(targetUnit as 'g' | 'oz' | 'lb', weightValues);
+
+      // Manually merge the RHF data with our custom weight data
       const notePayload = { 
         ...data, 
         weight_grams: totalGrams > 0 ? totalGrams : undefined,
@@ -145,12 +151,13 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 space-y-4 my-8">
         <div className="flex justify-between items-center border-b border-slate-100 pb-2">
           <h2 className="text-lg font-bold text-slate-900">{initialData ? 'Edit Clinical Note' : 'Add Clinical Note'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
         </div>
+        
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -174,7 +181,6 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
                 <option value="Injury">Injury</option>
                 <option value="Routine">Routine</option>
               </select>
-              {errors.note_type && <p className="text-red-500 text-xs mt-1">{errors.note_type.message}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700">Diagnosis / Primary Issue</label>
@@ -184,60 +190,65 @@ export const AddClinicalNoteModal: React.FC<Props> = ({ isOpen, onClose, onSave,
               <label className="block text-sm font-medium text-slate-700">Body Condition Score (1-5)</label>
               <select {...register('bcs', { valueAsNumber: true })} className="w-full mt-1 border border-slate-300 rounded-lg p-2 text-sm">
                 <option value="">Select BCS</option>
-                {[1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map(v => <option key={v} value={v}>{v}</option>)}
+                <option value="1">1 - Emaciated</option>
+                <option value="1.5">1.5</option>
+                <option value="2">2 - Thin</option>
+                <option value="2.5">2.5</option>
+                <option value="3">3 - Ideal</option>
+                <option value="3.5">3.5</option>
+                <option value="4">4 - Overweight</option>
+                <option value="4.5">4.5</option>
+                <option value="5">5 - Obese</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Current Weight</label>
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Weight ({targetUnit})</h4>
+          </div>
+
+          {/* DYNAMIC WEIGHT ENGINE (Fully Isolated from RHF) */}
+          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <h4 className="text-sm font-medium text-slate-700 mb-3">Current Weight ({targetUnit})</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {targetUnit === 'g' && (
+                <div className="sm:col-span-3">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Grams</label>
+                  <input type="number" value={weightValues.g || ''} onChange={(e) => handleWeightChange('g', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500" placeholder="e.g. 1050" />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {targetUnit === 'g' && (
-                    <div className="sm:col-span-3">
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Grams</label>
-                      <input type="number" value={weightValues.g || ''} onChange={(e) => handleWeightChange('g', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500 transition-all" placeholder="e.g. 1050" />
-                    </div>
-                  )}
-                  {targetUnit === 'oz' && (
-                    <>
-                      <div className="sm:col-span-2">
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Ounces (oz)</label>
-                        <input type="number" value={weightValues.oz || ''} onChange={(e) => handleWeightChange('oz', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500 transition-all" placeholder="oz" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">8ths</label>
-                        <select value={weightValues.eighths || 0} onChange={(e) => handleWeightChange('eighths', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500 transition-all">
-                          {[0,1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}/8</option>)}
-                        </select>
-                      </div>
-                    </>
-                  )}
-                  {targetUnit === 'lb' && (
-                    <>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Pounds (lb)</label>
-                        <input type="number" value={weightValues.lb || ''} onChange={(e) => handleWeightChange('lb', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500 transition-all" placeholder="lb" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Ounces (oz)</label>
-                        <select value={weightValues.oz || 0} onChange={(e) => handleWeightChange('oz', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500 transition-all">
-                          {Array.from({length: 16}, (_, i) => i).map(n => <option key={n} value={n}>{n} oz</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">8ths</label>
-                        <select value={weightValues.eighths || 0} onChange={(e) => handleWeightChange('eighths', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500 transition-all">
-                          {[0,1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}/8</option>)}
-                        </select>
-                      </div>
-                    </>
-                  )}
-                </div>
-                <p className="text-[10px] font-medium text-slate-400 italic">Calculated Value: {convertToGrams(targetUnit as 'g' | 'oz' | 'lb', weightValues).toFixed(2)}g</p>
-              </div>
+              )}
+              {targetUnit === 'oz' && (
+                <>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Ounces (oz)</label>
+                    <input type="number" value={weightValues.oz || ''} onChange={(e) => handleWeightChange('oz', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500" placeholder="oz" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">8ths</label>
+                    <select value={weightValues.eighths || 0} onChange={(e) => handleWeightChange('eighths', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500">
+                      {[0,1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}/8</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
+              {targetUnit === 'lb' && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Pounds (lb)</label>
+                    <input type="number" value={weightValues.lb || ''} onChange={(e) => handleWeightChange('lb', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500" placeholder="lb" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Ounces (oz)</label>
+                    <select value={weightValues.oz || 0} onChange={(e) => handleWeightChange('oz', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500">
+                      {Array.from({length: 16}, (_, i) => i).map(n => <option key={n} value={n}>{n} oz</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">8ths</label>
+                    <select value={weightValues.eighths || 0} onChange={(e) => handleWeightChange('eighths', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500">
+                      {[0,1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}/8</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
+            <p className="text-[10px] font-medium text-slate-400 italic mt-2">Calculated Value: {convertToGrams(targetUnit as 'g' | 'oz' | 'lb', weightValues).toFixed(2)}g</p>
           </div>
 
           <div>
