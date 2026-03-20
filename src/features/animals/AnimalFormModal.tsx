@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { X, Check, Camera, Loader2, Zap, Shield, History, Info, Globe, Skull, Users, Thermometer, Scale } from 'lucide-react';
-import { Animal, AnimalCategory, HazardRating, ConservationStatus, EntityType } from '../../types';
+import { Animal, AnimalCategory, HazardRating, ConservationStatus, EntityType, MovementType, InternalMovement, ExternalTransfer, TransferType, TransferStatus } from '../../types';
 import { useAnimalForm } from './useAnimalForm';
 import { getAnimalIntelligence } from '../../services/geminiService';
 import { convertToGrams, convertFromGrams } from '../../services/weightUtils';
@@ -12,6 +12,7 @@ import { db } from '../../lib/db';
 import Cropper from 'react-easy-crop';
 import { getCroppedImg } from '../../utils/cropImage';
 import { uploadFile } from '../../lib/storageEngine';
+import { useAuthStore } from '../../store/authStore';
 
 interface AnimalFormModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
 
   const { register, watch, setValue, getValues } = form;
   const { locations } = useOperationalLists();
+  const { currentUser } = useAuthStore();
 
   // Cropper State
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
@@ -118,10 +120,49 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
     };
     
     try {
+      if (initialData) {
+        if (initialData.location !== payload.location && initialData.location !== 'Main Aviary') {
+          const internalMovement: InternalMovement = {
+            id: crypto.randomUUID(),
+            animal_id: initialData.id,
+            animal_name: payload.name,
+            log_date: new Date().toISOString(),
+            movement_type: MovementType.TRANSFER,
+            source_location: initialData.location || 'Unknown',
+            destination_location: payload.location,
+            created_by: currentUser?.initials || 'SYSTEM',
+            notes: 'Auto-generated from profile location update.'
+          };
+          await mutateOnlineFirst('internal_movements', internalMovement, 'upsert');
+        }
+      } else {
+        const newAnimalId = uuidv4();
+        payload.id = newAnimalId;
+        if (['BORN', 'TRANSFERRED_IN', 'RESCUE'].includes(payload.acquisition_type)) {
+          const externalTransfer: ExternalTransfer = {
+            id: crypto.randomUUID(),
+            animal_id: newAnimalId,
+            animal_name: payload.name,
+            transfer_type: TransferType.ARRIVAL,
+            date: payload.acquisition_date || new Date().toISOString().split('T')[0],
+            institution: payload.origin || 'Unknown',
+            transport_method: 'N/A',
+            cites_article_10_ref: 'N/A',
+            status: TransferStatus.COMPLETED,
+            notes: `Auto-generated from animal creation (Type: ${payload.acquisition_type}).`
+          };
+          await mutateOnlineFirst('external_transfers', externalTransfer, 'upsert');
+        }
+      }
+    } catch (e) {
+      console.error("Log failed", e);
+    }
+    
+    try {
       const animalData: Animal = {
         ...initialData,
         ...payload,
-        id: initialData?.id || uuidv4(),
+        id: initialData?.id || payload.id || uuidv4(),
       } as Animal;
 
       await mutateOnlineFirst('animals', animalData, 'upsert');
@@ -792,7 +833,7 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
                     image={imageToCrop}
                     crop={crop}
                     zoom={zoom}
-                    aspect={4 / 3}
+                    aspect={3 / 4}
                     onCropChange={setCrop}
                     onZoomChange={setZoom}
                     onCropComplete={(_, croppedAreaPixels) => setCroppedAreaPixels(croppedAreaPixels)}

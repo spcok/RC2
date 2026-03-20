@@ -141,7 +141,7 @@ const WeatherView: React.FC = () => {
   const windSpeed = typeof current.windSpeed === 'number' ? current.windSpeed : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 mt-4 border border-slate-200 rounded-2xl p-6">
       
       {/* TOP HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
