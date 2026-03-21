@@ -94,8 +94,8 @@ export async function prune14DayCache() {
 export async function forceHydrateFromCloud() {
   const tables = [
     'animals', 'daily_logs', 'medical_logs', 'tasks', 'users', 
-    'role_permissions', 'settings', 'contacts', 'zla_documents',
-    'safety_drills', 'maintenance_logs', 'first_aid_logs', 'incidents', 'daily_rounds', 'operational_lists'
+    'role_permissions', 'organisations', 'contacts', 'zla_documents',
+    'safety_drills', 'maintenance_logs', 'first_aid_logs', 'incidents', 'daily_rounds', 'operational_lists', 'husbandry_logs'
   ];
 
   try {
@@ -116,7 +116,9 @@ export async function forceHydrateFromCloud() {
         
         if (data && data.length > 0) {
           const dbTable = db[table as keyof AppDatabase] as import('dexie').Table<unknown, string | number>;
-          await dbTable.bulkPut(data);
+          if (dbTable) {
+            await dbTable.bulkPut(data);
+          }
           if (data.length < pageSize) hasMore = false;
           page++;
         } else {
@@ -172,6 +174,7 @@ export async function processSyncQueue() {
           await db.sync_queue.bulkDelete(deletes.map(d => d.id!));
         } catch (err) {
           for (const d of deletes) await handleSyncFailure(d, err);
+          break; // Break on failure
         }
       }
 
@@ -230,6 +233,7 @@ export async function processSyncQueue() {
 
         } catch (err) {
           for (const item of upserts) await handleSyncFailure(item, err);
+          break; // Break on failure
         }
       }
     }
@@ -277,7 +281,7 @@ export async function reconcileMissedEvents() {
     'incidents', 'internal_movements', 'external_transfers', 'daily_rounds', 
     'operational_lists', 'mar_charts', 'quarantine_records', 'shifts', 
     'timesheets', 'holidays', 'safety_drills', 'maintenance_logs', 
-    'first_aid_logs', 'organisations', 'contacts', 'zla_documents', 'bug_reports'
+    'first_aid_logs', 'organisations', 'contacts', 'zla_documents', 'husbandry_logs', 'users', 'role_permissions'
   ];
   
   const lastSync = localStorage.getItem('last_sync_reconcile') || '2000-01-01T00:00:00.000Z';
@@ -289,7 +293,11 @@ export async function reconcileMissedEvents() {
       if (error) throw error;
       if (data && data.length > 0) {
         const dbTable = db[table as keyof AppDatabase] as import('dexie').Table<unknown, string | number>;
-        await dbTable.bulkPut(data);
+        if (dbTable) {
+          await dbTable.bulkPut(data);
+        } else {
+          console.warn(`🛠️ [Sync Engine] Table ${table} not found in local database.`);
+        }
       }
     }));
     localStorage.setItem('last_sync_reconcile', new Date().toISOString());

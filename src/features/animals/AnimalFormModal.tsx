@@ -39,7 +39,7 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
   const [isCropping, setIsCropping] = useState(false);
   const [isUploadingCrop, setIsUploadingCrop] = useState(false);
-  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
 
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -56,13 +56,13 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
     if (!imageToCrop || !croppedAreaPixels) return;
     try {
       setIsUploadingCrop(true);
-      const croppedBlob = await getCroppedImg(imageToCrop, croppedAreaPixels);
+      const croppedFile = await getCroppedImg(imageToCrop, croppedAreaPixels);
       
-      // Store the blob for upload during form submission
-      setPhotoBlob(croppedBlob);
+      // Store the file for upload during form submission
+      setPhotoFile(croppedFile);
       
       // Create a local URL for preview in the UI
-      const previewUrl = URL.createObjectURL(croppedBlob);
+      const previewUrl = URL.createObjectURL(croppedFile);
       setValue('image_url', previewUrl, { shouldValidate: true, shouldDirty: true });
 
       setIsCropping(false);
@@ -108,16 +108,18 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
       dam_id: data.dam_id === "" ? null : data.dam_id,
     };
 
-    const finalId = initialData?.id || uuidv4();
-    let finalImageUrl = data.image_url;
+    // Establish the target ID early
+    const targetId = initialData?.id || crypto.randomUUID();
+    let finalImageUrl = initialData?.image_url;
 
-    if (photoBlob) {
+    if (photoFile) {
       try {
-        const photoFile = new File([photoBlob], `profile-${finalId}.jpg`, { type: 'image/jpeg' });
-        const uploadResult = await queueFileUpload(photoFile, 'animals', finalId, 'animals', 'image_url');
-        finalImageUrl = uploadResult.attachment_url;
+        // Upload the binary file to the bucket
+        const uploadResult = await queueFileUpload(photoFile, 'animals', targetId, 'animals', 'image_url');
+        finalImageUrl = uploadResult.attachment_url; // Map to the returned URL property
       } catch (error) {
-        console.error('Failed to upload profile image to bucket:', error);
+        console.error('🛠️ [Storage] Failed to upload profile image:', error);
+        alert('Image upload failed, but the profile will still be saved. Ensure your device is online or try a smaller image.');
       }
     }
 
@@ -156,7 +158,7 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
         if (['BORN', 'TRANSFERRED_IN', 'RESCUE'].includes(payload.acquisition_type)) {
           const externalTransfer: ExternalTransfer = {
             id: crypto.randomUUID(),
-            animal_id: finalId,
+            animal_id: targetId,
             animal_name: payload.name,
             transfer_type: TransferType.ARRIVAL,
             date: payload.acquisition_date || new Date().toISOString().split('T')[0],
@@ -177,7 +179,7 @@ const AnimalFormModal: React.FC<AnimalFormModalProps> = ({ isOpen, onClose, init
       const animalData: Animal = {
         ...initialData,
         ...payload,
-        id: finalId,
+        id: targetId,
       } as Animal;
 
       await mutateOnlineFirst('animals', animalData, 'upsert');
