@@ -16,6 +16,7 @@ import GlobalBugReporter from '../ui/GlobalBugReporter';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { processSyncQueue } from '../../lib/syncEngine';
 import { UpdateBanner } from './UpdateBanner';
+import { InstallButton } from '../ui/InstallButton';
 
 interface LayoutProps {
   fontScale?: number;
@@ -230,6 +231,9 @@ const Layout: React.FC<LayoutProps> = () => {
       <div className="p-4 border-t border-slate-800/50 bg-[#18181a]">
         {!isSidebarCollapsed ? (
           <>
+            <div className="mb-4 hidden md:flex justify-center">
+              <InstallButton />
+            </div>
             <div className="flex items-center gap-3 mb-4 px-2">
               <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center font-black text-xs text-white border border-slate-600 shrink-0">
                 {String(currentUser?.initials || '--')}
@@ -252,6 +256,9 @@ const Layout: React.FC<LayoutProps> = () => {
           </>
         ) : (
           <div className="flex flex-col items-center gap-4">
+            <div className="hidden md:flex">
+              <InstallButton />
+            </div>
             <button onClick={handleLogout} className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition-colors" title="Logout">
               <LogOut size={16}/>
             </button>
@@ -337,6 +344,7 @@ const Layout: React.FC<LayoutProps> = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <InstallButton />
             <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center font-black text-[10px] text-white border border-slate-600 shadow-inner">
               {String(currentUser?.initials || '--')}
             </div>
