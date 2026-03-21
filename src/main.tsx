@@ -38,58 +38,27 @@ createRoot(document.getElementById('root')!).render(
 );
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      const registration = await navigator.serviceWorker.register('/sw.js');
-      console.log('🛠️ [PWA] Service Worker registered:', registration.scope);
-
-      // 1. Update Detection (OTA)
-      registration.addEventListener('updatefound', () => {
-        const newWorker = registration.installing;
-        if (newWorker) {
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('🛠️ [PWA] New content available; please refresh.');
-              // @ts-expect-error - custom property stash
-              window.pwaUpdateReady = true;
-              window.dispatchEvent(new CustomEvent('pwa-update-available'));
-            }
-          });
-        }
-      });
-
-      // 2. Background Sync Registration
-      if ('sync' in registration) {
-        const registerSync = async () => {
-          if (registration.active) {
-            try {
-              // @ts-expect-error - sync is not in standard types yet
-              await registration.sync.register('koa-data-sync');
-              console.log('🛠️ [PWA] Background Sync registered.');
-            } catch (err) {
-              console.warn('🛠️ [PWA] Background Sync registration failed:', err);
-            }
-          } else {
-            // Wait for activation
-            registration.addEventListener('activate', registerSync, { once: true });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(
+      (reg) => {
+        console.log('🛠️ [PWA] Service Worker Active:', reg.scope);
+        
+        // 1. Update Detection (OTA)
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('🛠️ [PWA] New content available; please refresh.');
+                // @ts-expect-error - custom property stash
+                window.pwaUpdateReady = true;
+                window.dispatchEvent(new CustomEvent('pwa-update-available'));
+              }
+            });
           }
-        };
-        registerSync();
-      }
-
-    } catch (err) {
-      console.error('🛠️ [PWA] SW Registration Failed:', err);
-    }
+        });
+      },
+      (err) => console.error('🛠️ [PWA] Service Worker Registration Failed:', err)
+    );
   });
-
-  // 3. Broadcast Listener for Background Sync
-  const broadcast = new BroadcastChannel('koa-pwa-messages');
-  broadcast.onmessage = (event) => {
-    if (event.data && event.data.type === 'SYNC_REQUESTED') {
-      console.log('🌐 [PWA] Sync requested by Service Worker. Processing queue...');
-      import('./lib/syncEngine').then(({ processSyncQueue }) => {
-        processSyncQueue().catch(err => console.error('🛠️ [PWA] Background sync processing failed:', err));
-      });
-    }
-  };
 }

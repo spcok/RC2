@@ -46,13 +46,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Background Sync
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'koa-sync') {
-    console.log('🌐 [SW] Background Sync triggered: koa-sync');
-    broadcast.postMessage({ type: 'SYNC_REQUESTED' });
-  }
-});
+// Removed Background Sync listener
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
